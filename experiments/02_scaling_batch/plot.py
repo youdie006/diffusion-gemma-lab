@@ -1,5 +1,5 @@
-# EXP D 논문 스타일 렌더링 (results.json -> figures/)
-# 측정 없이 재실행 가능: .venv/bin/python experiments/02_scaling_batch/plot.py
+# Paper-style rendering for EXP D (results.json -> figures/).
+# Re-runnable without measuring: .venv/bin/python experiments/02_scaling_batch/plot.py
 
 import json
 import os

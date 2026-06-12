@@ -1,5 +1,5 @@
-# EXP E 논문 스타일 렌더링 (results.json -> figures/)
-# 측정 없이 재실행 가능: python experiments/03_real_models/plot.py
+# Paper-style rendering for EXP E (results.json -> figures/).
+# Re-runnable without measuring: python experiments/03_real_models/plot.py
 
 import json
 import os
@@ -21,14 +21,18 @@ ORDER = [
     ("LLaDA-MoE-7B-A1B (dLLM)", "diffusion steps=32"),
     ("LLaDA-MoE-7B-A1B (dLLM)", "diffusion steps=64"),
     ("LLaDA-MoE-7B-A1B (dLLM)", "diffusion steps=128"),
+    ("Gemma3-1B (AR)", "AR greedy"),
     ("Qwen2.5-1.5B (AR)", "AR greedy"),
+    ("Gemma3-4B (AR)", "AR greedy"),
     ("Qwen2.5-7B (AR)", "AR greedy"),
 ]
 LABELS = [
     "LLaDA-MoE 7B-A1B\n(32 steps)",
     "LLaDA-MoE 7B-A1B\n(64 steps)",
     "LLaDA-MoE 7B-A1B\n(128 steps, official)",
+    "Gemma 3 1B\n(AR, Gemma family)",
     "Qwen2.5-1.5B\n(AR, active-param peer)",
+    "Gemma 3 4B\n(AR, Gemma family)",
     "Qwen2.5-7B\n(AR, total-param peer)",
 ]
 

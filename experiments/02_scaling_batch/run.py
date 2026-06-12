@@ -1,13 +1,13 @@
-# EXP D: 디퓨전 속도 이점은 모델 크기·배치 크기에 따라 어떻게 변하는가
+# EXP D: how the diffusion speed advantage changes with model size and batch size.
 #
-# EXP C(01_sampler_dynamics)에서 토이 모델의 캔버스 forward가 1토큰 디코드의 ~1.3배
-# 비용임을 측정했다. 벤더의 "4~6배" 주장은 우리 토이 실측(12~16스텝에서 12~16배)보다
-# 낮은데, 가설은 두 가지다:
-#   (1) 모델이 커지면 연산 비중이 커져 캔버스 forward가 상대적으로 비싸진다
-#   (2) 배치가 커지면 AR 디코드도 연산 효율이 좋아져 이점이 줄어든다
-# 이 실험은 같은 DiffusionGemma 코드로 크기/배치를 스윕해 두 가설을 검증한다.
+# EXP C (01_sampler_dynamics) measured a toy model's canvas forward at ~1.3x the cost of
+# a 1-token decode. The vendor's "4-6x" claim is lower than our toy result (12-16x at
+# 12-16 steps); two hypotheses:
+#   (1) bigger models shift toward compute-bound, making the canvas forward pricier
+#   (2) bigger batches make AR decode more compute-efficient, shrinking the advantage
+# This experiment sweeps size/batch with the same DiffusionGemma code to test both.
 #
-# 실행: .venv/bin/python experiments/02_scaling_batch/run.py
+# Run: .venv/bin/python experiments/02_scaling_batch/run.py
 
 import json
 import os
@@ -28,7 +28,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 FIG_DIR = os.path.join(HERE, "figures")
 os.makedirs(FIG_DIR, exist_ok=True)
 DEVICE = "cuda"
-# 하드웨어 사양은 공개하지 않는다 - 구체적 모델명을 결과물에 남기지 말 것
+# Hardware specs are intentionally not disclosed in any artifact.
 RESULTS = {"device": "consumer GPU (model undisclosed)"}
 
 CANVAS = 256
@@ -37,7 +37,7 @@ VOCAB = 32768
 
 def build(hidden, layers=10, seed=0):
     torch.manual_seed(seed)
-    # GQA 제약: kv heads가 attention heads를 나눠야 함 -> heads는 짝수, kv = heads/2
+    # GQA constraint: kv heads must divide attention heads -> even heads, kv = heads/2
     heads = max(2, hidden // 128 // 2 * 2)
     text_cfg = DiffusionGemmaTextConfig(
         vocab_size=VOCAB, hidden_size=hidden, intermediate_size=hidden * 2,
@@ -45,7 +45,7 @@ def build(hidden, layers=10, seed=0):
         num_key_value_heads=heads // 2, head_dim=64, global_head_dim=64,
         num_global_key_value_heads=heads // 2, sliding_window=128,
         max_position_embeddings=8192, num_experts=4, top_k_experts=2,
-        # grouped_mm이 16바이트 정렬을 요구하므로 expert 차원은 16의 배수로
+        # grouped_mm requires 16-byte-aligned strides -> expert dim multiple of 16
         moe_intermediate_size=max(32, hidden // 3 // 16 * 16),
     )
     vision_cfg = {"model_type": "gemma4_vision", "hidden_size": 32, "intermediate_size": 64,
@@ -56,7 +56,7 @@ def build(hidden, layers=10, seed=0):
 
 
 def t_canvas_marginal(model, bs):
-    """디노이징 스텝 1회(캔버스 256토큰 병렬 forward)의 한계비용을 2점법으로 측정."""
+    """Two-point estimate of the marginal cost of one denoising step (256-token canvas forward)."""
     prompt = torch.randint(2, VOCAB - 10, (bs, 64), device=DEVICE)
 
     def gen_time(steps):
@@ -73,7 +73,7 @@ def t_canvas_marginal(model, bs):
 
 
 def t_ar_step(model, bs):
-    """같은 가중치 인코더(causal)로 1토큰 디코드 1회 비용을 측정 (AR 프록시)."""
+    """Measure one 1-token decode with the same-weight causal encoder (AR proxy)."""
     enc = model.model.encoder
     with torch.no_grad():
         cache = DynamicCache()
@@ -95,7 +95,7 @@ def speedup(tc, ta, steps):
 
 
 def median3(fn, *args):
-    """GPU 클럭 변동 노이즈를 줄이기 위해 3회 측정 중앙값 사용."""
+    """Median of 3 runs to reduce GPU clock jitter."""
     vals = sorted(fn(*args) for _ in range(3))
     return vals[1]
 

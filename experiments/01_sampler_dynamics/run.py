@@ -1,17 +1,17 @@
-# DiffusionGemma 샘플러 동역학 실험 (소비자급 GPU용)
+# DiffusionGemma sampler dynamics experiments (consumer-GPU friendly).
 #
-# 실물 26B 모델은 양자화로도 18GB VRAM이 필요해 보유한 소비자급 GPU에서 구동 불가.
-# 대신 Transformers의 "실제 DiffusionGemma 생성 코드"에 초소형 모델을 끼워
-# 알고리즘 동역학을 계측한다. 텍스트 품질이 아니라 샘플러의 거동이 측정 대상.
+# The real 26B needs ~18GB VRAM even quantized, beyond the GPU used here. Instead we
+# plug tiny models into the REAL Transformers generation code and instrument the
+# algorithm's dynamics. The subject is sampler behavior, not text quality.
 #
-# EXP A: 무학습(랜덤 가중치) 모델 + 실제 generate() - 확신 없는 모델에서의 거동
-# EXP B: 실제 샘플러/정지 클래스 + 합성 logits - 확신이 차오를 때의 커밋 웨이브
-# EXP C: 실제 모델 forward 실측 - 캔버스 병렬 forward vs AR 1토큰 디코드 속도 모델
+# EXP A: untrained (random-weight) model through the real generate() loop
+# EXP B: real sampler/stopping classes driven by synthetic confidence-ramp logits
+# EXP C: measured speed model - canvas-parallel forward vs AR 1-token decode
 #
-# 측정 데이터는 results.json에 전부 저장하고, 그림은 plot.py가 렌더링한다
-# (재측정 없이 스타일만 다시 입힐 수 있음).
+# All measured data is saved to results.json; figures are rendered by plot.py
+# (so styling can be iterated without re-measuring).
 #
-# 실행: .venv/bin/python experiments/01_sampler_dynamics/run.py
+# Run: .venv/bin/python experiments/01_sampler_dynamics/run.py
 
 import json
 import math
@@ -36,7 +36,7 @@ import plot
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-# 하드웨어 사양은 공개하지 않는다 - 구체적 모델명을 결과물에 남기지 말 것
+# Hardware specs are intentionally not disclosed in any artifact.
 RESULTS = {"device": "consumer GPU (model undisclosed)"}
 
 CANVAS = 256
@@ -60,7 +60,7 @@ def tiny_model(vocab=1000, hidden=64, layers=2, seed=0):
 
 
 # ---------------------------------------------------------------------------
-# EXP A: 무학습 모델을 실제 generate() 루프에 통과시키며 샘플러를 계측
+# EXP A: instrument the sampler while an untrained model runs the real generate()
 # ---------------------------------------------------------------------------
 
 def exp_a():
@@ -104,15 +104,17 @@ def exp_a():
 
 
 # ---------------------------------------------------------------------------
-# EXP B: 합성 logits로 "확신이 차오르는 모델"을 흉내내며 실제 샘플러 클래스 구동
+# EXP B: drive the real sampler classes with synthetic logits of growing confidence
 # ---------------------------------------------------------------------------
 
 def synthetic_denoise(growth, entropy_bound=0.1, vocab=1000, seed=0,
                       t_min=0.4, t_max=0.8, conf_th=0.005, stab_th=1):
-    """실제 EntropyBoundSampler / 온도 스케줄 / 정지 기준을 합성 logits로 구동한다.
+    """Drive the real EntropyBoundSampler / temperature schedule / stopping criteria
+    with synthetic logits.
 
-    합성 모델: 위치별 난이도 d_i ~ U(0,1). 경과 스텝 e에서 목표 토큰의 logit 마진은
-    margin_i(e) = growth * e - 8 * d_i  (마진이 클수록 확신, 음수면 사실상 노이즈)
+    Synthetic model: per-position difficulty d_i ~ U(0,1). At elapsed step e the target
+    token logit margin is margin_i(e) = growth * e - 8 * d_i (larger margin = more
+    confident; negative is effectively noise).
     """
     g = torch.Generator(device="cpu").manual_seed(seed)
     target = torch.randint(0, vocab, (1, CANVAS), generator=g)
@@ -182,16 +184,16 @@ def exp_b():
 
 
 # ---------------------------------------------------------------------------
-# EXP C: 캔버스 병렬 forward vs AR 1토큰 디코드 - 실측 기반 속도 모델
+# EXP C: canvas-parallel forward vs AR 1-token decode - measured speed model
 # ---------------------------------------------------------------------------
 
 def timed_generate(model, prompt, steps):
     torch.cuda.synchronize()
     t0 = time.perf_counter()
     with torch.no_grad():
-        # confidence_threshold=0.0은 불가(validate가 float > 0 요구. 게다가 에러 메시지가
-        # 존재하지 않는 self.entropy_bound를 참조해 AttributeError가 나는 upstream 버그 있음).
-        # 1e-9로 사실상 조기 종료를 비활성화해 스텝 수를 고정한다.
+        # confidence_threshold=0.0 is rejected (validate requires float > 0; worse, its
+        # error message references a nonexistent self.entropy_bound, raising AttributeError
+        # - an upstream bug). 1e-9 effectively disables early stopping to pin the step count.
         model.generate(prompt, max_new_tokens=CANVAS, max_denoising_steps=steps,
                        confidence_threshold=1e-9)
     torch.cuda.synchronize()

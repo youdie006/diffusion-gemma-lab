@@ -1,18 +1,20 @@
-# EXP E: 실존 디퓨전 LLM vs AR LLM - 소비자급 GPU 실측 비교
+# EXP E: real diffusion LLM vs AR LLMs on a single consumer GPU
 #
-# DiffusionGemma 26B는 로컬 구동이 불가하므로, 구조가 가장 가까운 실존 공개 dLLM인
-# LLaDA-MoE-7B-A1B(총 7B, 활성 1.4B MoE - DiffusionGemma 26B-A4B와 같은 sparse MoE dLLM)를
-# AR 모델과 같은 조건(nf4 4bit, batch 1, 128토큰 생성)에서 비교한다.
+# DiffusionGemma 26B cannot run locally, so we benchmark the closest runnable open dLLM:
+# LLaDA-MoE-7B-A1B (7B total / 1.4B active sparse MoE -- the same architecture family as
+# DiffusionGemma 26B-A4B) against AR peers under identical conditions
+# (nf4 4-bit, batch 1, 128 new tokens, greedy).
 #
-#   dLLM:            inclusionAI/LLaDA-MoE-7B-A1B-Instruct (steps 128/64/32 스윕)
-#   AR 활성파라미터 동급: Qwen/Qwen2.5-1.5B-Instruct
-#   AR 총파라미터 동급:   Qwen/Qwen2.5-7B-Instruct
+#   dLLM:                  inclusionAI/LLaDA-MoE-7B-A1B-Instruct (steps 128/64/32 sweep)
+#   AR active-param peer:  Qwen/Qwen2.5-1.5B-Instruct
+#   AR total-param peer:   Qwen/Qwen2.5-7B-Instruct
+#   AR Gemma-family peers: gemma-3-1b-it, gemma-3-4b-it (unsloth mirrors, via add_gemma.py)
 #
-# LLaDA 생성 함수는 모델 카드의 공식 구현을 그대로 사용 (mask_id=156895,
-# low-confidence remasking). DiffusionGemma와 달리 KV 캐시가 없어 매 스텝
-# 전체 시퀀스를 forward한다는 점에 유의 (2025년 세대 dLLM의 한계).
+# The LLaDA generation function is taken verbatim from its model card (mask_id=156895,
+# low-confidence remasking). Unlike DiffusionGemma it has NO KV cache: every step
+# re-forwards the full sequence (a 2025-generation dLLM limitation).
 #
-# 실행: LD_LIBRARY_PATH=<nvidia cu13 lib> .venv-llada/bin/python experiments/03_real_models/run.py
+# Run: LD_LIBRARY_PATH=<nvidia cu13 lib> .venv-llada/bin/python experiments/03_real_models/run.py
 
 import gc
 import json
@@ -26,7 +28,7 @@ from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer, BitsAnd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEVICE = "cuda"
-# 하드웨어 사양은 공개하지 않는다
+# Hardware specs are intentionally not disclosed in any artifact.
 RESULTS = {"device": "consumer GPU (model undisclosed)", "quantization": "bitsandbytes nf4 4bit", "runs": []}
 
 GEN_LEN = 128
@@ -41,7 +43,7 @@ BNB = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.bfloat1
                          bnb_4bit_quant_type="nf4")
 
 
-# --- LLaDA 공식 생성 함수 (모델 카드 README에서 그대로, 타이밍만 추가) ---------------
+# --- official LLaDA generation function (from the model card, timing added) -----------
 
 def add_gumbel_noise(logits, temperature):
     if temperature == 0:
@@ -104,7 +106,7 @@ def llada_generate(model, prompt, steps=128, gen_length=128, block_length=32,
     return x
 
 
-# --- 벤치마크 루틴 -------------------------------------------------------------
+# --- benchmark routines ----------------------------------------------------------------
 
 def free():
     gc.collect()
@@ -142,11 +144,22 @@ def bench_llada():
     free()
 
 
+def load_ar(mid):
+    """Load an AR checkpoint; multimodal checkpoints (e.g. Gemma 3 4B) need the
+    image-text-to-text auto class, but text-only generate works the same way."""
+    try:
+        return AutoModelForCausalLM.from_pretrained(mid, quantization_config=BNB,
+                                                    device_map=DEVICE).eval()
+    except Exception:
+        from transformers import AutoModelForImageTextToText
+        return AutoModelForImageTextToText.from_pretrained(mid, quantization_config=BNB,
+                                                           device_map=DEVICE).eval()
+
+
 def bench_ar(mid, label, active, total):
     print(f"[ar] loading {mid}")
     tok = AutoTokenizer.from_pretrained(mid)
-    model = AutoModelForCausalLM.from_pretrained(mid, quantization_config=BNB,
-                                                 device_map=DEVICE).eval()
+    model = load_ar(mid)
     vram = torch.cuda.max_memory_allocated() / 2**30
 
     for name, text in PROMPTS.items():
@@ -178,6 +191,8 @@ if __name__ == "__main__":
     bench_llada()
     bench_ar("Qwen/Qwen2.5-1.5B-Instruct", "Qwen2.5-1.5B (AR)", "1.5B", "1.5B")
     bench_ar("Qwen/Qwen2.5-7B-Instruct", "Qwen2.5-7B (AR)", "7.6B", "7.6B")
+    bench_ar("unsloth/gemma-3-1b-it", "Gemma3-1B (AR)", "1.0B", "1.0B")  # ungated mirror of the official weights
+    bench_ar("unsloth/gemma-3-4b-it", "Gemma3-4B (AR)", "4.3B", "4.3B")
     with open(os.path.join(HERE, "results.json"), "w") as f:
         json.dump(RESULTS, f, indent=2, ensure_ascii=False)
     print("done.")

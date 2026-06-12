@@ -1,5 +1,5 @@
-# EXP A/B/C 논문 스타일 렌더링 (results.json -> figures/)
-# 측정 없이 재실행 가능: .venv/bin/python experiments/01_sampler_dynamics/plot.py
+# Paper-style rendering for EXP A/B/C (results.json -> figures/).
+# Re-runnable without measuring: .venv/bin/python experiments/01_sampler_dynamics/plot.py
 
 import json
 import math
