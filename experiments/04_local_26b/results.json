@@ -1,0 +1,69 @@
+{
+  "device": "consumer desktop, CPU-only llama.cpp build (specs undisclosed)",
+  "llama_cpp": "PR #24423 head 10a2613 on top of master (depth-50 clone)",
+  "runs": [
+    {
+      "model": "Gemma 4 26B-A4B QAT q4_0 (AR, llama-cli, CPU)",
+      "prompt": "math",
+      "wall_s": 140.8,
+      "gen_tokens_requested": 160,
+      "output": " ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██\n██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀\n                                    ██    ██\n                                    ▀▀    ▀▀\n\nbuild      : b50-10a2613\nmodel      : gemma-4-26B_q4_0-it.gguf\nmodalities : text\n\navailable commands:\n  /exit or Ctrl+C     stop or exit\n  /regen              regenerate the last response\n  /clear              clear the chat history\n  /read <file>        add a text file\n  /glob <pattern>     add text files using globbing pattern\n\n\n> Lily can run 12 kilometers per hour for 4 hours. After that, she runs 6 kilometers per hour. How many kilometers can she run in 8 hours?\n\n|\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b \b[Start thinking]\n*   Lily's speed for the first part: 12 km/h.\n    *   Duration of the first part: 4 hours.\n    *   Lily's speed for the second part: 6 km/h.\n    *   Total time: 8 hours.\n    *   Goal: Find the total distance covered in 8 hours.\n\n    *   Time spent running at 12 km/h = 4 hours.\n    *   Distance = Speed × Time.\n    *   Distance 1 = 12 km/h × 4 hours = 48 km.\n\n    *   Total time = 8 hours.\n    *   Time already used = 4 hours.\n    *\n\n[ Prompt: 28.2 t/s | Generation: 4.2 t/s ]\n\nExiting...",
+      "tok_per_s": 4.2
+    },
+    {
+      "model": "Gemma 4 26B-A4B QAT q4_0 (AR, llama-cli, CPU)",
+      "prompt": "korean",
+      "wall_s": 141.8,
+      "gen_tokens_requested": 160,
+      "output": "█ ██ ▄█▀██ ██ ██ ██ ▄█▀██    ██    ██ ██ ██ ██\n██ ██ ▀█▄██ ██ ██ ██ ▀█▄██ ██ ▀████ ████▀ ████▀\n                                    ██    ██\n                                    ▀▀    ▀▀\n\nbuild      : b50-10a2613\nmodel      : gemma-4-26B_q4_0-it.gguf\nmodalities : text\n\navailable commands:\n  /exit or Ctrl+C     stop or exit\n  /regen              regenerate the last response\n  /clear              clear the chat history\n  /read <file>        add a text file\n  /glob <pattern>     add text files using globbing pattern\n\n\n> 대한민국의 수도는 어디인가요? 그 도시의 특징을 두 문장으로 설명해 주세요.\n\n|\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b \b[Start thinking]\n*   Question 1: 대한민국의 수도는 어디인가요? (What is the capital of South Korea?)\n    *   Question 2: 그 도시의 특징을 두 문장으로 설명해 주세요. (Explain the characteristics of that city in two sentences.)\n\n    *   Capital of South Korea: Seoul (서울).\n\n    *   *Idea 1:* It's the political, economic, and cultural center.\n    *   *Idea 2:* It has a mix of modern skyscrapers and traditional palaces.\n    *   *Idea 3:* It's a highly populated metropolitan area with advanced technology.\n    *   *Idea 4:* It's the heart of the Han River.\n\n    *   *Draft \n\n[ Prompt: 21.8 t/s | Generation: 4.2 t/s ]\n\nExiting...",
+      "tok_per_s": 4.2
+    },
+    {
+      "model": "Gemma 4 26B-A4B QAT q4_0 (AR, llama-cli, CPU)",
+      "prompt": "code",
+      "wall_s": 133.0,
+      "gen_tokens_requested": 160,
+      "output": "        ██    ██\n                                    ▀▀    ▀▀\n\nbuild      : b50-10a2613\nmodel      : gemma-4-26B_q4_0-it.gguf\nmodalities : text\n\navailable commands:\n  /exit or Ctrl+C     stop or exit\n  /regen              regenerate the last response\n  /clear              clear the chat history\n  /read <file>        add a text file\n  /glob <pattern>     add text files using globbing pattern\n\n\n> Write a Python function that checks whether a string is a palindrome.\n\n|\b-\b\\\b|\b/\b-\b\\\b|\b/\b-\b\\\b \b[Start thinking]\nThe objective is to write a Python function that determines if a given string is a palindrome (reads the same forwards and backwards).\n\n    *   *Case sensitivity:* Should \"Racecar\" be a palindrome? Usually, in programming challenges, we treat it as one, so we should normalize to lowercase.\n    *   *Non-alphanumeric characters:* Should \"A man, a plan, a canal: Panama\" be a palindrome? Yes. This means we need to strip out spaces, punctuation, and symbols.\n    *   *Empty string/Single character:* These are technically palindromes.\n\n    *   *Approach 1: Slicing (The \"Pythonic\" way).*\n        *   Reverse the string using `[::-1]`.\n\n\n[ Prompt: 26.7 t/s | Generation: 4.6 t/s ]\n\nExiting...",
+      "tok_per_s": 4.6
+    },
+    {
+      "model": "DiffusionGemma 26B-A4B Q4_K_M (diffusion, llama-diffusion-cli, CPU)",
+      "prompt": "math",
+      "wall_s": 324.8,
+      "gen_tokens_requested": 256,
+      "tok_per_s": 1.2,
+      "tokens": 256,
+      "ms_per_step": 19986.26,
+      "steps_used": 11,
+      "blocks": 1,
+      "in_step_parallel_tok_s": 13.0,
+      "output": "<|channel>thought\n*   Lily's first segment: 12 km/h for 4 hours.\n    *   Lily's second segment: 6 km/h.\n    *   Total time to be considered: 8 hours.\n    *   Goal: Find the total distance run in 8 hours.\n\n    *   Speed = 12 km/h\n    *   Time = 4 hours\n    *   Distance = Speed × Time\n    *   Distance 1 = 12 km/h × 4 h = 48 km.\n\n    *   Total time allowed = 8 hours.\n    *   Time already spent = 4 hours.\n    *   Remaining time = Total time - Time spent = 8 h - 4 h = 4 hours.\n\n    *   Speed = 6 km/h\n    *   Time = 4 hours\n    *   Distance = Speed × Time\n    *   Distance 2 = 6 km/h × 4 h = 24 km.\n\n    *   Total Distance = Distance 1 + Distance 2\n    *   Total Distance = 48 km + 24 km = 7\ntotal time: 219848.85ms, time per step: 19986.26ms (11 steps over 1 blocks, entropy-bound)\nthroughput: 1.2 tok/s (256 tok in 219848.85ms), in-step parallel 13 tok/s (256-tok canvas x 11.0 steps/block)"
+    },
+    {
+      "model": "DiffusionGemma 26B-A4B Q4_K_M (diffusion, llama-diffusion-cli, CPU)",
+      "prompt": "korean",
+      "wall_s": 431.3,
+      "gen_tokens_requested": 256,
+      "tok_per_s": 0.8,
+      "tokens": 256,
+      "ms_per_step": 16932.73,
+      "steps_used": 19,
+      "blocks": 1,
+      "in_step_parallel_tok_s": 15.0,
+      "output": "<|channel>thought\n*   Question: What is the capital of South Korea? (대한민국의 수도는 어디인가요?)\n    *   Requirement: Describe the characteristics of that city in exactly two sentences (그 도시의 특징을 두 문장으로 설명해 주세요).\n\n    *   Capital of South Korea: Seoul (서울).\n\n    *   Sentence 1: It is the political, economic, and cultural center of the country.\n    *   Sentence 2: It is a city where historical sites (like palaces) coexist with modern skyscrapers and advanced technology.\n\n    *   Direct answer: 대한민국의 수도는 **서울**입니다.\n    *   Description:\n        1. 서울은 대한민국의 정치, 경제, 문화의 중심지입니다.\n        2. 과거의 역사와 현대가 공존하는 역동적인 도시입니다.\n\n    *   Did I answer the capital question? Yes (Seoul).\n    *   Did I provide exactly two sentences for the characteristic description? Yes.\n    *   Is the language correct? Yes (Korean).<channel|>대한민국의 수도는 **서울**입니다.\n\n서울은 대한민국의 정치, 경제, 문화의 중심지 역할을 합니다. 과거의 고궁과\ntotal time: 321721.95ms, time per step: 16932.73ms (19 steps over 1 blocks, entropy-bound)\nthroughput: 0.8 tok/s (256 tok in 321721.95ms), in-step parallel 15 tok/s (256-tok canvas x 19.0 steps/block)"
+    },
+    {
+      "model": "DiffusionGemma 26B-A4B Q4_K_M (diffusion, llama-diffusion-cli, CPU)",
+      "prompt": "code",
+      "wall_s": 419.3,
+      "gen_tokens_requested": 256,
+      "tok_per_s": 0.8,
+      "tokens": 256,
+      "ms_per_step": 19545.74,
+      "steps_used": 16,
+      "blocks": 1,
+      "in_step_parallel_tok_s": 13.0,
+      "output": "<|channel>thought\nThe objective is to write a Python function that determines if a string is a palindrome.\n\n    *   A palindrome is a word, phrase, number, or sequence that reads the same backward as forward (e.g., \"madam\", \"racecar\").\n    *   *Edge cases to consider:* Case sensitivity (e.g., \"Madam\"), spaces, punctuation, and non-alphanumeric characters (e.g., \"A man, a plan, a canal: Panama\").\n\n    *   *Approach 1: String Slicing (The Pythonic way).*\n        *   Compare the string with its reverse `[::-1]`.\n        *   *Pros:* Very concise, idiomatic.\n        *   *Cons:* Creates a copy of the string in memory.\n\n    *   *Approach 2: Two-pointer method.*\n        *   Compare the first and last characters, then move towards the center.\n        *   *Pros:* Memory efficient (O(1) extra space).\n        *   *Cons:* Slightly more code.\n\n    *   *Approach 3: Recursion.*\n        *   Base case: empty string or single character.\n        *   Recursive\ntotal time: 312731.80ms, time per step: 19545.74ms (16 steps over 1 blocks, entropy-bound)\nthroughput: 0.8 tok/s (256 tok in 312731.80ms), in-step parallel 13 tok/s (256-tok canvas x 16.0 steps/block)"
+    }
+  ]
+}

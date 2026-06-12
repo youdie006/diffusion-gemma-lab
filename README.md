@@ -21,6 +21,10 @@ TL;DR:
   schedule) measures **15x slower** than its AR active-param peer at official settings on
   the same GPU and quantization. "Diffusion" alone is not fast -- DiffusionGemma's KV-cached
   encoder and adaptive stopping are the actual speed engineering
+- The real 26B pair runs CPU-only via llama.cpp: DiffusionGemma's **adaptive stopping
+  tracks prompt difficulty end-to-end (11/16/19 steps)** and its Korean is fluent, but on
+  compute-bound hardware it is 4-5x slower than its own AR base -- the speed advantage
+  only exists where decode is bandwidth-bound (GPU, low batch)
 
 ## 1. What is DiffusionGemma
 
@@ -262,6 +266,54 @@ serving engineering (context caching, adaptive steps) that the 2026 DiffusionGem
 and 2025 open dLLMs lack. Whether DiffusionGemma's own 4-6x claim holds end-to-end still
 needs the cloud-GPU run.
 
+### EXP F. As far as consumer hardware goes: the real 26B pair, CPU-only
+
+Neither DiffusionGemma 26B-A4B nor its AR base Gemma 4 26B-A4B fits the GPU, but both fit
+system RAM as 4-bit GGUFs. We run the actual pair head-to-head, CPU-only, through
+llama.cpp -- DiffusionGemma via the (unmerged) [llama.cpp PR
+#24423](https://github.com/ggml-org/llama.cpp/pull/24423), which implements the
+diffusion-gemma architecture including the entropy-bound decoder with the official
+parameters (48-step cap, 0.8 -> 0.4 temperature, entropy bound 0.1, adaptive stopping,
+context KV cache).
+
+Code: [experiments/04_local_26b/run.py](experiments/04_local_26b/run.py),
+numbers and full outputs: [results.json](experiments/04_local_26b/results.json)
+
+*Table 4. The real 26B pair on a consumer desktop, CPU-only llama.cpp, same 3 prompts
+(math / Korean / code), greedy.*
+
+| model | decoding | steps used | effective tok/s | wall per reply |
+|---|---|---|---|---|
+| Gemma 4 26B-A4B (QAT q4_0) | AR | -- | 4.2 / 4.2 / 4.6 | 133-142 s |
+| DiffusionGemma 26B-A4B (Q4_K_M) | block diffusion, entropy-bound | 11 / 19 / 16 | 1.2 / 0.8 / 0.8 | 325-431 s |
+
+Findings:
+
+1. **The pair runs at all on consumer hardware** -- that is the headline. 26B total / 4B
+   active MoE at 4-bit fits comfortably in system RAM
+2. **Adaptive stopping works on the real model and tracks difficulty**: 11 steps (math),
+   16 (code), 19 (Korean) -- right around the vendor's "typically 12-16"; a trivial smoke
+   prompt ("what is 3+5") converged in 5 steps. This closes the loop on EXP A/B: step
+   count is a live function of model confidence, measured end-to-end at 26B
+3. **CPU inverts the speed claim, as the mechanism predicts**: DiffusionGemma runs
+   0.8-1.2 tok/s vs the AR base's 4.2-4.6 tok/s (4-5x slower), even with the KV cache and
+   adaptive stopping working as designed. On compute-bound hardware a 256-token canvas
+   forward costs roughly 256 sequential tokens' worth of compute (in-step parallel
+   throughput measured 13-15 tok/s vs AR's 4.4), so paying it 11-19 times per canvas
+   cannot win. The diffusion speedup exists only where decode is bandwidth-bound with
+   idle compute -- a GPU at low batch (EXP C) -- and disappears in compute-bound regimes,
+   whether high batch on GPU (EXP D) or CPU (here)
+4. **Quality at real scale looks nothing like the 2025 dLLM**: DiffusionGemma's Korean
+   reply is fluent, correct, and instruction-following ("서울은 대한민국의 정치, 경제,
+   문화의 중심지 역할을 합니다..."), where LLaDA-MoE produced broken code-switching (EXP
+   E). Both Gemmas exhibit a thought-channel before answering; with `-n 256` (one canvas)
+   the thought can consume most of the canvas and truncate the final answer -- a real
+   ergonomic cost of fixed 256-token canvases for short-form chat
+
+Caveats: CPU-only (says nothing about the GPU speed claims), an unmerged PR
+implementation, slightly different quants (community Q4_K_M vs official QAT q4_0), one
+prompt per category.
+
 ### Side finding: an upstream bug
 
 Passing `confidence_threshold=0.0` makes the validator's error message reference a
@@ -282,6 +334,19 @@ python3 -m venv --system-site-packages .venv-llada
 .venv-llada/bin/python experiments/03_real_models/run.py   # downloads ~32GB of models
 ```
 
+EXP F needs a llama.cpp build from the DiffusionGemma PR (CPU-only shown):
+
+```bash
+git clone --depth 50 https://github.com/ggml-org/llama.cpp ~/builds/llama.cpp-dg
+cd ~/builds/llama.cpp-dg
+git fetch origin pull/24423/head:pr-24423 --depth 50 && git checkout pr-24423
+cmake -B build -DGGML_CUDA=OFF -DLLAMA_CURL=OFF -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j8 --target llama-diffusion-cli llama-cli
+# GGUFs: unsloth/diffusiongemma-26B-A4B-it-GGUF (Q4_K_M) and
+#        google/gemma-4-26B-A4B-it-qat-q4_0-gguf, then:
+.venv/bin/python experiments/04_local_26b/run.py
+```
+
 Figures re-render from saved results without re-measuring: each experiment has a
 `plot.py` (shared style in `experiments/paperstyle.py`).
 
@@ -299,11 +364,17 @@ git -C reference/transformers sparse-checkout set src/transformers/models
 
 ## 5. Next steps
 
-- [ ] Run the real 26B on a cloud GPU (H100-class), reproduce the official 1,008 tok/s
-- [ ] Head-to-head vs Gemma 4 26B A4B (AR) on the same hardware -- batch 1/4/16 curves
-- [ ] `max_denoising_steps` / `entropy_bound` vs output quality trade-off (real model)
-- [ ] Korean output quality, block-boundary (multiples of 256) coherence, long-context
-      degradation spot checks
+Everything runnable on consumer hardware has been run (EXP A-F). What remains requires a
+cloud GPU (H100-class, both 26B models resident in VRAM):
+
+- [ ] Reproduce the official 1,008 tok/s and the 4-6x batch-1 speedup vs Gemma 4 26B-A4B
+- [ ] Batch 1/4/16 speedup curves on the real pair (EXP D predicts collapse)
+- [ ] `max_denoising_steps` / `entropy_bound` vs output quality trade-off at full speed
+- [ ] Long-context degradation spot checks (model card shows MRCR 32.0 vs 44.1)
+
+Cheap local follow-ups, if wanted:
+
+- [ ] Block-boundary (multiples of 256) coherence probes via llama.cpp `-n 512+`
 - [ ] Find out what vLLM "native support" actually is (no diffusion code in vLLM main as
       of 2026-06-11)
 
