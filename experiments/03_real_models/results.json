@@ -253,6 +253,42 @@
       "tok_per_s": 2.9,
       "vram_gib": 3.23,
       "output": ""
+    },
+    {
+      "model": "Gemma4-E4B (AR)",
+      "active_params": "~4B eff.",
+      "total_params": "8B raw",
+      "mode": "AR greedy",
+      "prompt": "math",
+      "gen_tokens": 128,
+      "time_s": 40.78,
+      "tok_per_s": 3.1,
+      "vram_gib": 8.88,
+      "output": "Here's how to solve the problem step-by-step:\n\n**1. Calculate the distance covered in the first part of the run:**\n* Speed = 12 kilometers per hour\n* Time = 4 hours\n* Distance = Speed $\\times$ Time\n* Distance = $12 \\text{ km/hr} \\times 4 \\text{ hours} = 48 \\text{ kilometers}$\n\n**2. Calculate the time remaining:**\n* Total time = 8 hours\n* Time already spent = 4 hours\n* Remaining time = $8 \\text{ ho"
+    },
+    {
+      "model": "Gemma4-E4B (AR)",
+      "active_params": "~4B eff.",
+      "total_params": "8B raw",
+      "mode": "AR greedy",
+      "prompt": "korean",
+      "gen_tokens": 128,
+      "time_s": 33.41,
+      "tok_per_s": 3.8,
+      "vram_gib": 8.88,
+      "output": "대한민국의 수도는 **서울**입니다.\n\n서울은 전통과 현대가 공존하는 역동적인 도시로, 첨단 기술과 전통 문화가 어우러져 끊임없이 변화하고 발전하는 활력 넘치는 곳입니다. 또한, 세계적인 문화 예술의 중심지이자 비즈니스의 허브로서 국제적인 영향력을 가지고 있습니다.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n.\n"
+    },
+    {
+      "model": "Gemma4-E4B (AR)",
+      "active_params": "~4B eff.",
+      "total_params": "8B raw",
+      "mode": "AR greedy",
+      "prompt": "code",
+      "gen_tokens": 128,
+      "time_s": 32.45,
+      "tok_per_s": 3.9,
+      "vram_gib": 8.88,
+      "output": "Here are a few ways to write a Python function to check if a string is a palindrome, depending on whether you want to consider case sensitivity and non-alphanumeric characters.\n\n### 1. Simple Palindrome Check (Case-Sensitive, Exact Match)\n\nThis is the most straightforward implementation.\n\n```python\ndef is_palindrome_simple(s):\n    \"\"\"\n    Checks if a string is a palindrome by comparing it to its r"
     }
   ]
 }

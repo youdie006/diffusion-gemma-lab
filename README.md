@@ -200,10 +200,12 @@ DiffusionGemma itself cannot run here, but the closest runnable open dLLM can:
 **LLaDA-MoE-7B-A1B-Instruct** (inclusionAI, 2025) is a sparse-MoE diffusion LLM with 7B
 total / 1.4B active parameters -- the same architecture family as DiffusionGemma 26B-A4B.
 We benchmark it with its official model-card sampler (mask-based, low-confidence
-remasking) against four AR peers: **Qwen2.5-1.5B** (active-parameter peer),
+remasking) against five AR peers: **Qwen2.5-1.5B** (active-parameter peer),
 **Qwen2.5-7B** (total-parameter peer), and -- since DiffusionGemma derives from the Gemma
-family -- **Gemma 3 1B** and **Gemma 3 4B** (official repos are gated; weights via the
-ungated unsloth re-uploads of the same checkpoints). All quantized identically
+family -- **Gemma 3 1B**, **Gemma 3 4B** (official repos are gated; weights via the
+ungated unsloth re-uploads of the same checkpoints), and **Gemma 4 E4B**, the only
+release of DiffusionGemma's own generation that approaches consumer hardware (the actual
+26B-A4B base does not fit; 12B/31B do not either). All quantized identically
 (bitsandbytes nf4), batch 1, 128 new tokens, greedy, 3 prompts (math / Korean / code).
 
 Code: [experiments/03_real_models/run.py](experiments/03_real_models/run.py),
@@ -218,14 +220,20 @@ numbers and full outputs: [results.json](experiments/03_real_models/results.json
 | LLaDA-MoE-7B-A1B | 1.4B / 7B | diffusion, 32 steps | 2.8 | 4.7 GiB |
 | Gemma 3 1B | 1.0B / 1.0B | AR, greedy | 4.1 | 1.2 GiB |
 | Qwen2.5-1.5B | 1.5B / 1.5B | AR, greedy | 13.8 | 1.2 GiB |
+| Gemma 4 E4B | ~4B eff. / 8B raw | AR, greedy | 3.6 * | 8.9 GiB |
 | Gemma 3 4B | 4.3B / 4.3B | AR, greedy | 2.7 | 3.2 GiB |
 | Qwen2.5-7B | 7.6B / 7.6B | AR, greedy | 14.2 | 5.6 GiB |
+
+\* Gemma 4 E4B's peak allocation (8.9 GiB) exceeded physical VRAM, so part of it ran from
+host memory; its throughput is an underestimate. The bias works against the AR side, so
+the dLLM-is-slower conclusion is unaffected.
 
 ![Figure 8](experiments/03_real_models/figures/fig_e_real_models.png)
 
 *Figure 8. A 2025-generation diffusion LLM is slower than every AR baseline on consumer
-hardware: 0.8 tok/s at official settings vs 13.8 (Qwen2.5-1.5B, 15x) and 4.1 (Gemma 3 1B,
-5x). Whiskers: min-max over the 3 prompts.*
+hardware: 0.8 tok/s at official settings vs 13.8 (Qwen2.5-1.5B, 15x), 4.1 (Gemma 3 1B,
+5x), and 3.6 (Gemma 4 E4B, DiffusionGemma's own generation, 4.5x). Whiskers: min-max over
+the 3 prompts.*
 
 The result inverts the "diffusion = fast" marketing, and the reasons are exactly the two
 things DiffusionGemma changed:

@@ -164,7 +164,10 @@ def bench_ar(mid, label, active, total):
 
     for name, text in PROMPTS.items():
         m = [{"role": "user", "content": text}]
-        ids = tok.apply_chat_template(m, add_generation_prompt=True, return_tensors="pt").to(DEVICE)
+        ids = tok.apply_chat_template(m, add_generation_prompt=True, return_tensors="pt")
+        if not torch.is_tensor(ids):  # transformers 5.x returns a BatchEncoding here
+            ids = ids["input_ids"]
+        ids = ids.to(DEVICE)
         with torch.no_grad():  # warmup
             model.generate(ids, max_new_tokens=8, do_sample=False)
         torch.cuda.synchronize()
