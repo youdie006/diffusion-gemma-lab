@@ -1,0 +1,82 @@
+{
+  "device": "consumer GPU (model undisclosed)",
+  "size_sweep": [
+    {
+      "hidden": 256,
+      "params_m": 16.9,
+      "t_canvas_ms": 58.1,
+      "t_ar_ms": 46.938,
+      "cost_ratio": 1.24,
+      "speedup_at_16": 12.9
+    },
+    {
+      "hidden": 512,
+      "params_m": 48.5,
+      "t_canvas_ms": 53.4,
+      "t_ar_ms": 48.592,
+      "cost_ratio": 1.1,
+      "speedup_at_16": 14.6
+    },
+    {
+      "hidden": 768,
+      "params_m": 97.1,
+      "t_canvas_ms": 51.52,
+      "t_ar_ms": 47.878,
+      "cost_ratio": 1.08,
+      "speedup_at_16": 14.9
+    },
+    {
+      "hidden": 1152,
+      "params_m": 196.4,
+      "t_canvas_ms": 55.05,
+      "t_ar_ms": 44.927,
+      "cost_ratio": 1.23,
+      "speedup_at_16": 13.1
+    },
+    {
+      "hidden": 1536,
+      "params_m": 335.6,
+      "t_canvas_ms": 54.32,
+      "t_ar_ms": 45.874,
+      "cost_ratio": 1.18,
+      "speedup_at_16": 13.5
+    }
+  ],
+  "batch_sweep": [
+    {
+      "batch": 1,
+      "t_canvas_ms": 51.71,
+      "t_ar_ms": 46.699,
+      "cost_ratio": 1.11,
+      "speedup_at_16": 14.4
+    },
+    {
+      "batch": 2,
+      "t_canvas_ms": 69.18,
+      "t_ar_ms": 45.955,
+      "cost_ratio": 1.51,
+      "speedup_at_16": 10.6
+    },
+    {
+      "batch": 4,
+      "t_canvas_ms": 77.22,
+      "t_ar_ms": 48.095,
+      "cost_ratio": 1.61,
+      "speedup_at_16": 10.0
+    },
+    {
+      "batch": 8,
+      "t_canvas_ms": 117.2,
+      "t_ar_ms": 45.27,
+      "cost_ratio": 2.59,
+      "speedup_at_16": 6.2
+    },
+    {
+      "batch": 16,
+      "t_canvas_ms": 532.06,
+      "t_ar_ms": 47.415,
+      "cost_ratio": 11.22,
+      "speedup_at_16": 1.4
+    }
+  ]
+}
