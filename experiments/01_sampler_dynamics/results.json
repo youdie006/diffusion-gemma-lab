@@ -1,0 +1,64 @@
+{
+  "device": "consumer GPU (model undisclosed)",
+  "exp_a": {
+    "steps_used": 48,
+    "max_steps": 48,
+    "early_stopped": false,
+    "commits_per_step_mean": 1.0,
+    "mean_entropy_first": 6.887423038482666,
+    "mean_entropy_last": 6.8289337158203125,
+    "uniform_entropy": 6.907755278982137,
+    "tokens_per_forward_reported": 1.1875
+  },
+  "exp_b_base": {
+    "growth": 1.0,
+    "steps_used": 18,
+    "tokens_per_forward": 14.222222222222221
+  },
+  "exp_b_sweep": {
+    "growth": {
+      "0.5": 31,
+      "1.0": 18,
+      "2.0": 10,
+      "4.0": 6
+    },
+    "entropy_bound_mean_commits": {
+      "0.01": 29.1,
+      "0.1": 45.9,
+      "1.0": 67.2,
+      "10.0": 90.4
+    },
+    "entropy_bound_steps": {
+      "0.01": 18,
+      "0.1": 18,
+      "1.0": 18,
+      "10.0": 18
+    }
+  },
+  "exp_c": {
+    "params_m": 69.3,
+    "step_grid": [
+      4,
+      8,
+      16,
+      32,
+      48
+    ],
+    "gen_times_s": [
+      0.217,
+      0.442,
+      0.903,
+      1.601,
+      2.542
+    ],
+    "t_canvas_forward_ms": 51.73,
+    "t_fixed_ms": 23.55,
+    "t_ar_decode_step_ms": 40.991,
+    "canvas_vs_1tok_cost_ratio": 1.3,
+    "speedup_at": {
+      "12": 16.29,
+      "16": 12.33,
+      "48": 4.19
+    }
+  }
+}
