@@ -11,14 +11,16 @@ TL;DR:
 - Where the speed comes from: replacing 256 memory-bound one-token AR decode steps with
   12-48 parallel forwards over a 256-token canvas
 - Measured on a consumer GPU (69M toy model, same weights for both sides): one 256-token
-  canvas forward costs only **1.26x** a single-token decode -> 12-16x speedup at the
+  canvas forward costs only **1.27x** a single-token decode -> 12-17x speedup at the
   typical 12-16 steps, still 4.2x at the 48-step cap
 - The speedup depends entirely on **model confidence (low entropy)**. An untrained model
   commits exactly 1 token per step and ends up slower than AR (measured)
 - Batch size kills the advantage: measured speedup collapses from 14.4x (bs=1) to 1.4x
   (bs=16) -- diffusion decoding helps latency, not high-throughput serving
-- Against a real 2025-generation diffusion LLM (LLaDA-MoE-7B-A1B) on the same GPU and
-  quantization, see EXP E below
+- A real 2025-generation diffusion LLM (LLaDA-MoE-7B-A1B: no KV cache, fixed-step
+  schedule) measures **15x slower** than its AR active-param peer at official settings on
+  the same GPU and quantization. "Diffusion" alone is not fast -- DiffusionGemma's KV-cached
+  encoder and adaptive stopping are the actual speed engineering
 
 ## 1. What is DiffusionGemma
 
@@ -44,20 +46,12 @@ Distilled from a close reading of the implementation (~5,500 lines). Full analys
 line references: [docs/01-generation-algorithm.md](docs/01-generation-algorithm.md)
 (Korean).
 
-```
-prompt ──> encoder (causal attention, KV cache)      <- identical to AR prefill
-              │
-              v       repeat (<=48 steps per block, adaptive early stop at ~12-16)
-  canvas init: 256 random tokens ──> decoder forward (bidirectional inside canvas)
-              ^                            │
-              │                            v
-  re-randomize uncommitted        commit only low-entropy positions
-  positions (renoise)             (entropy-bound acceptance rule)
-              │                            │
-              └────────────────────────────┘
-              v
-  append finished canvas to context, next block (block-level autoregression)
-```
+![Figure 1](docs/fig_concept_pipeline.png)
+
+*Figure 1. The block-diffusion generation pipeline as implemented: the encoder plays the
+role of AR prefill over the context, the decoder iteratively denoises a 256-token canvas
+(commit low-entropy positions, re-randomize the rest), and finished canvases chain
+block-autoregressively.*
 
 Key details (all verified in code):
 
@@ -100,7 +94,11 @@ the sampler.
 - `tokens_per_forward` (the official efficiency metric reported by `generate()`) = 1.19,
   i.e. effectively AR efficiency
 
-![EXP A](experiments/01_sampler_dynamics/figures/fig_a_untrained.png)
+![Figure 2](experiments/01_sampler_dynamics/figures/fig_a_untrained.png)
+
+*Figure 2. Untrained model in the real generation loop: per-step committed tokens (bars)
+never exceed the at-least-one guarantee, and mean canvas entropy (line) stays at the
+uniform bound, so adaptive stopping never fires.*
 
 Implication: the speed advantage comes from **trained confidence**, not from the
 architecture. On inputs the model is unsure about (hard problems, out-of-distribution
@@ -112,7 +110,11 @@ We drive the real `EntropyBoundSampler`, temperature schedule, and stopping crit
 synthetic logits whose confidence grows over steps, with per-position difficulty. Easy
 positions commit first, in waves.
 
-![EXP B heatmap](experiments/01_sampler_dynamics/figures/fig_b_heatmap.png)
+![Figure 3](experiments/01_sampler_dynamics/figures/fig_b_heatmap.png)
+
+*Figure 3. Canvas convergence under a synthetic confidence ramp (growth = 1.0): dark cells
+are committed positions. Easy positions commit first; commits sweep across the canvas in
+waves until adaptive stopping fires.*
 
 - Scaling the confidence growth rate by 0.5/1/2/4 changes convergence to 31/18/10/6 steps --
   the "typically 12-16 steps" claim is equivalent to a claim about how fast the trained
@@ -120,27 +122,36 @@ positions commit first, in waves.
 - Raising `entropy_bound` from 0.01 to 10 raises commits per step from 29 to 90. It is the
   aggressiveness (speed) knob; the quality cost needs measuring on the real model
 
-![EXP B sweep](experiments/01_sampler_dynamics/figures/fig_b_sweep.png)
+![Figure 4](experiments/01_sampler_dynamics/figures/fig_b_sweep.png)
+
+*Figure 4. (a) Faster confidence growth means fewer steps until adaptive stop. (b) The
+entropy bound epsilon controls how many tokens commit per step -- the aggressiveness knob.*
 
 ### EXP C. Measured speed model: how cheap is a canvas forward
 
 Measured with a 69M toy (identical weights for both modes):
 
+*Table 1. Canvas forward vs AR decode, measured (batch 1).*
+
 | measurement | result |
 |---|---|
-| one 256-token canvas forward (marginal cost) | 51.7 ms |
-| one AR 1-token decode (KV cache, same encoder weights) | 41.0 ms |
-| cost ratio (canvas / 1-token) | **1.26x** |
-| implied speedup at 12 steps | 16.3x |
-| at 16 steps | 12.3x |
+| one 256-token canvas forward (marginal cost) | 51.5 ms |
+| one AR 1-token decode (KV cache, same encoder weights) | 40.5 ms |
+| cost ratio (canvas / 1-token) | **1.27x** |
+| implied speedup at 12 steps | 16.8x |
+| at 16 steps | 12.6x |
 | at the 48-step cap | 4.2x |
 
-![EXP C](experiments/01_sampler_dynamics/figures/fig_c_speedup.png)
+![Figure 5](experiments/01_sampler_dynamics/figures/fig_c_speedup.png)
+
+*Figure 5. Measured speed model: speedup over AR decode as a function of denoising steps
+per 256-token canvas. Shaded band: vendor's typical convergence range; dashed line: the
+48-step cap.*
 
 Interpretation: a 1-token decode is bound by weight loading (memory bandwidth), not
-compute, so pushing 256 tokens through at once costs only 1.26x. That is the hardware
+compute, so pushing 256 tokens through at once costs only 1.27x. That is the hardware
 essence of the diffusion speed claim. The vendor's "4-6x" is more conservative than our toy
-measurement (12-16x at 12-16 steps), presumably because the real 26B has a much larger
+measurement (12-17x at 12-16 steps), presumably because the real 26B has a much larger
 compute share, making the canvas forward relatively pricier. Caveat: toy scale on a
 consumer GPU -- this validates the structure, not absolute numbers.
 
@@ -156,13 +167,19 @@ result).** Across 17M-336M the canvas/1-token cost ratio stays flat at 1.1-1.2. 
 sizes are far below GPU compute saturation; the compute-share effect cannot be seen at toy
 scale. Verifying it needs the real 26B on cloud hardware.
 
-![EXP D size](experiments/02_scaling_batch/figures/fig_d_size.png)
+![Figure 6](experiments/02_scaling_batch/figures/fig_d_size.png)
+
+*Figure 6. Size sweep, batch 1, median of 3. (a) The canvas/1-token cost ratio and (b) the
+implied 16-step speedup are both flat across 17M-336M: a null result -- the toy regime
+never approaches compute saturation.*
 
 **Hypothesis 2 -- bigger batch, vanishing advantage: strongly confirmed.** From batch 1 to
 16 the cost ratio explodes from 1.1 to 11.2 and the 16-step speedup collapses from 14.4x to
 1.4x. This confirms vLLM's "particularly attractive at low batch sizes" framing, and shows
 the flip side: **at high-batch serving, the diffusion speed advantage effectively
 disappears.**
+
+*Table 2. Batch sweep at 97M, median of 3.*
 
 | batch | cost ratio (canvas/1tok) | speedup at 16 steps |
 |---|---|---|
@@ -172,7 +189,63 @@ disappears.**
 | 8 | 2.59 | 6.2x |
 | 16 | 11.22 | 1.4x |
 
-![EXP D batch](experiments/02_scaling_batch/figures/fig_d_batch.png)
+![Figure 7](experiments/02_scaling_batch/figures/fig_d_batch.png)
+
+*Figure 7. The diffusion advantage collapses toward AR parity as batch size grows: the
+canvas forward saturates compute while AR decode stays bandwidth-bound.*
+
+### EXP E. Comparison 2: a real 2025 diffusion LLM vs AR peers, same GPU
+
+DiffusionGemma itself cannot run here, but the closest runnable open dLLM can:
+**LLaDA-MoE-7B-A1B-Instruct** (inclusionAI, 2025) is a sparse-MoE diffusion LLM with 7B
+total / 1.4B active parameters -- the same architecture family as DiffusionGemma 26B-A4B.
+We benchmark it with its official model-card sampler (mask-based, low-confidence
+remasking) against two AR peers: **Qwen2.5-1.5B** (active-parameter peer) and
+**Qwen2.5-7B** (total-parameter peer). All three quantized identically (bitsandbytes nf4),
+batch 1, 128 new tokens, greedy, 3 prompts (math / Korean / code).
+
+Code: [experiments/03_real_models/run.py](experiments/03_real_models/run.py),
+numbers and full outputs: [results.json](experiments/03_real_models/results.json)
+
+*Table 3. Measured throughput (mean over 3 prompts), single consumer GPU, nf4 4-bit.*
+
+| model | active / total params | decoding | tok/s | peak VRAM |
+|---|---|---|---|---|
+| LLaDA-MoE-7B-A1B | 1.4B / 7B | diffusion, 128 steps (official) | 0.8 | 4.7 GiB |
+| LLaDA-MoE-7B-A1B | 1.4B / 7B | diffusion, 64 steps | 1.5 | 4.7 GiB |
+| LLaDA-MoE-7B-A1B | 1.4B / 7B | diffusion, 32 steps | 2.8 | 4.7 GiB |
+| Qwen2.5-1.5B | 1.5B / 1.5B | AR, greedy | 13.8 | 1.2 GiB |
+| Qwen2.5-7B | 7.6B / 7.6B | AR, greedy | 14.2 | 5.6 GiB |
+
+![Figure 8](experiments/03_real_models/figures/fig_e_real_models.png)
+
+*Figure 8. A 2025-generation diffusion LLM is an order of magnitude slower than AR peers
+on consumer hardware: 0.8 vs 13.8 tok/s at official settings (15x). Whiskers: min-max over
+the 3 prompts.*
+
+The result inverts the "diffusion = fast" marketing, and the reasons are exactly the two
+things DiffusionGemma changed:
+
+1. **No KV cache.** LLaDA's sampler re-forwards the full sequence (prompt + 128 tokens)
+   at every step. DiffusionGemma's encoder caches the context, so each denoising step
+   forwards only the 256-token canvas
+2. **Fixed-step schedule.** The official setting (steps = gen_length = 128) commits
+   exactly 1 token per forward -- AR-equivalent forward count, but each forward is a full
+   uncached sequence. Even at steps=32 (4 tokens/forward) it stays 5x behind AR.
+   DiffusionGemma's entropy-bound acceptance + adaptive stopping exist precisely to push
+   tokens-per-forward up without a fixed schedule
+
+Qualitative spot checks (full text in results.json): LLaDA-MoE's Korean output is
+essentially broken code-switching ("대ositories의 rollover는 인구입니다"), while even the
+1.5B AR peer answers fluently. Its math answer reasons correctly but locks into a
+tool-call JSON format. Caveats: single prompt per category, greedy decoding, and nf4
+quantization overhead flattens AR throughput (1.5B and 7.6B measure nearly the same), so
+read these numbers as relative, not absolute.
+
+Bottom line: **"diffusion LLM" is not intrinsically fast.** The speed story depends on
+serving engineering (context caching, adaptive steps) that the 2026 DiffusionGemma added
+and 2025 open dLLMs lack. Whether DiffusionGemma's own 4-6x claim holds end-to-end still
+needs the cloud-GPU run.
 
 ### Side finding: an upstream bug
 
@@ -187,7 +260,15 @@ python3 -m venv --system-site-packages .venv   # assuming torch+CUDA present
 .venv/bin/pip install "transformers>=5.11" matplotlib
 .venv/bin/python experiments/01_sampler_dynamics/run.py
 .venv/bin/python experiments/02_scaling_batch/run.py
+
+# EXP E needs a second venv: LLaDA-MoE custom code targets transformers 4.53
+python3 -m venv --system-site-packages .venv-llada
+.venv-llada/bin/pip install "transformers==4.53.2" bitsandbytes accelerate
+.venv-llada/bin/python experiments/03_real_models/run.py   # downloads ~32GB of models
 ```
+
+Figures re-render from saved results without re-measuring: each experiment has a
+`plot.py` (shared style in `experiments/paperstyle.py`).
 
 To fetch the official code/config locally:
 

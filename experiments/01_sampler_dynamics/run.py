@@ -8,6 +8,9 @@
 # EXP B: 실제 샘플러/정지 클래스 + 합성 logits - 확신이 차오를 때의 커밋 웨이브
 # EXP C: 실제 모델 forward 실측 - 캔버스 병렬 forward vs AR 1토큰 디코드 속도 모델
 #
+# 측정 데이터는 results.json에 전부 저장하고, 그림은 plot.py가 렌더링한다
+# (재측정 없이 스타일만 다시 입힐 수 있음).
+#
 # 실행: .venv/bin/python experiments/01_sampler_dynamics/run.py
 
 import json
@@ -15,9 +18,6 @@ import math
 import os
 import time
 
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import torch
 
 from transformers import (
@@ -25,7 +25,6 @@ from transformers import (
     DiffusionGemmaForBlockDiffusion,
     DiffusionGemmaTextConfig,
 )
-from transformers.models.diffusion_gemma import generation_diffusion_gemma as gen_mod
 from transformers.models.diffusion_gemma.generation_diffusion_gemma import (
     EntropyBoundSampler,
     EntropyBoundSamplerConfig,
@@ -33,9 +32,9 @@ from transformers.models.diffusion_gemma.generation_diffusion_gemma import (
     StableAndConfidentStoppingCriteria,
 )
 
+import plot
+
 HERE = os.path.dirname(os.path.abspath(__file__))
-FIG_DIR = os.path.join(HERE, "figures")
-os.makedirs(FIG_DIR, exist_ok=True)
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 # 하드웨어 사양은 공개하지 않는다 - 구체적 모델명을 결과물에 남기지 말 것
 RESULTS = {"device": "consumer GPU (model undisclosed)"}
@@ -88,33 +87,20 @@ def exp_a():
         EntropyBoundSampler.accept_canvas = orig_accept
 
     steps_used = len(log["commits"])
-    res = {
+    RESULTS["exp_a"] = {
         "steps_used": steps_used,
         "max_steps": MAX_STEPS,
         "early_stopped": steps_used < MAX_STEPS,
         "commits_per_step_mean": sum(log["commits"]) / steps_used,
-        "mean_entropy_first": log["mean_entropy"][0],
-        "mean_entropy_last": log["mean_entropy"][-1],
+        "commits_per_step": log["commits"],
+        "mean_entropy_per_step": [round(e, 4) for e in log["mean_entropy"]],
         "uniform_entropy": math.log(1000),
         "tokens_per_forward_reported": float(out.tokens_per_forward[0]),
     }
-    RESULTS["exp_a"] = res
-    print(f"  steps used: {steps_used}/{MAX_STEPS}, commits/step: {res['commits_per_step_mean']:.2f}, "
-          f"entropy {res['mean_entropy_first']:.2f} -> {res['mean_entropy_last']:.2f} "
-          f"(uniform={res['uniform_entropy']:.2f})")
-
-    fig, ax1 = plt.subplots(figsize=(8, 4))
-    ax1.bar(range(1, steps_used + 1), log["commits"], color="tab:blue", label="committed tokens")
-    ax1.set_xlabel("denoising step")
-    ax1.set_ylabel("tokens committed this step", color="tab:blue")
-    ax2 = ax1.twinx()
-    ax2.plot(range(1, steps_used + 1), log["mean_entropy"], color="tab:red", label="mean entropy")
-    ax2.axhline(math.log(1000), color="tab:red", ls=":", lw=1)
-    ax2.set_ylabel("mean token entropy (nats)", color="tab:red")
-    ax1.set_title("EXP A: untrained model - commits per step (real generate loop)")
-    fig.tight_layout()
-    fig.savefig(os.path.join(FIG_DIR, "fig_a_untrained.png"), dpi=120)
-    plt.close(fig)
+    r = RESULTS["exp_a"]
+    print(f"  steps used: {steps_used}/{MAX_STEPS}, commits/step: {r['commits_per_step_mean']:.2f}, "
+          f"entropy {r['mean_entropy_per_step'][0]:.2f} -> {r['mean_entropy_per_step'][-1]:.2f} "
+          f"(uniform={r['uniform_entropy']:.2f})")
 
 
 # ---------------------------------------------------------------------------
@@ -172,30 +158,17 @@ def synthetic_denoise(growth, entropy_bound=0.1, vocab=1000, seed=0,
 def exp_b():
     print("[EXP B] synthetic confidence ramp through the real sampler classes")
     base = synthetic_denoise(growth=1.0)
-    RESULTS["exp_b_base"] = {"growth": 1.0, "steps_used": base["steps_used"],
-                             "tokens_per_forward": base["tokens_per_forward"]}
+    RESULTS["exp_b_base"] = {
+        "growth": 1.0, "steps_used": base["steps_used"],
+        "tokens_per_forward": base["tokens_per_forward"],
+        "commit_step": base["commit_step"].tolist(),
+        "difficulty": [round(d, 4) for d in base["difficulty"].tolist()],
+    }
     print(f"  growth=1.0: stopped at step {base['steps_used']}, "
           f"tokens/forward={base['tokens_per_forward']:.1f}")
 
-    # 캔버스 수렴 히트맵: 각 위치가 몇 스텝째에 커밋됐는지 (난이도 순 정렬)
-    order = torch.argsort(base["difficulty"])
-    cs = base["commit_step"][order]
-    grid = torch.zeros(base["steps_used"], CANVAS)
-    for e in range(base["steps_used"]):
-        grid[e] = (cs <= e) & (cs >= 0)
-    fig, ax = plt.subplots(figsize=(9, 4))
-    ax.imshow(grid.numpy(), aspect="auto", cmap="Blues", interpolation="nearest")
-    ax.set_xlabel("canvas position (sorted by difficulty)")
-    ax.set_ylabel("elapsed denoising step")
-    ax.set_title(f"EXP B: canvas convergence (growth=1.0, stop at step {base['steps_used']})")
-    fig.tight_layout()
-    fig.savefig(os.path.join(FIG_DIR, "fig_b_heatmap.png"), dpi=120)
-    plt.close(fig)
-
-    # 스윕 1: 확신 상승 속도 vs 수렴 스텝
     growths = [0.5, 1.0, 2.0, 4.0]
     steps = [synthetic_denoise(growth=gr)["steps_used"] for gr in growths]
-    # 스윕 2: entropy_bound vs 스텝당 평균 커밋 수
     bounds = [0.01, 0.1, 1.0, 10.0]
     bound_runs = [synthetic_denoise(growth=1.0, entropy_bound=b) for b in bounds]
     mean_commits = [sum(r["commits"]) / len(r["commits"]) for r in bound_runs]
@@ -206,19 +179,6 @@ def exp_b():
     }
     print(f"  growth sweep {growths} -> steps {steps}")
     print(f"  entropy_bound sweep {bounds} -> commits/step {[round(c,1) for c in mean_commits]}")
-
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
-    ax1.plot(growths, steps, "o-")
-    ax1.set_xlabel("model confidence growth rate (synthetic)")
-    ax1.set_ylabel("steps until adaptive stop")
-    ax1.set_title("faster confidence -> fewer steps")
-    ax2.semilogx(bounds, mean_commits, "o-")
-    ax2.set_xlabel("entropy_bound")
-    ax2.set_ylabel("mean tokens committed per step")
-    ax2.set_title("entropy_bound is the aggressiveness knob")
-    fig.tight_layout()
-    fig.savefig(os.path.join(FIG_DIR, "fig_b_sweep.png"), dpi=120)
-    plt.close(fig)
 
 
 # ---------------------------------------------------------------------------
@@ -247,12 +207,10 @@ def exp_c():
     timed_generate(model, prompt, 4)  # warmup
     step_grid = [4, 8, 16, 32, 48]
     times = [timed_generate(model, prompt, s) for s in step_grid]
-    # 선형 회귀로 스텝당 한계 비용(t_canvas)과 고정 비용 분리
     xs, ys = torch.tensor(step_grid, dtype=torch.float), torch.tensor(times)
     t_canvas = float(((xs - xs.mean()) * (ys - ys.mean())).sum() / ((xs - xs.mean()) ** 2).sum())
     t_fixed = float(ys.mean() - t_canvas * xs.mean())
 
-    # AR 디코드 프록시: 같은 가중치의 인코더(causal)로 1토큰씩 256번 순차 forward
     from transformers import DynamicCache
     enc = model.model.encoder
     ar_time = None
@@ -279,29 +237,13 @@ def exp_c():
     if ar_time is not None:
         t_ar_step = ar_time / CANVAS
         res["t_ar_decode_step_ms"] = round(t_ar_step * 1e3, 3)
-        res["canvas_vs_1tok_cost_ratio"] = round(t_canvas / t_ar_step, 1)
+        res["canvas_vs_1tok_cost_ratio"] = round(t_canvas / t_ar_step, 2)
         res["speedup_at"] = {str(s): round((CANVAS * t_ar_step) / (t_fixed + s * t_canvas), 2)
                              for s in [12, 16, 48]}
     RESULTS["exp_c"] = res
     print(f"  {res['params_m']}M params: canvas forward {res['t_canvas_forward_ms']}ms"
           + (f", AR step {res['t_ar_decode_step_ms']}ms, speedup@12/16/48 = {res['speedup_at']}"
              if ar_time is not None else ""))
-
-    if ar_time is not None:
-        s_axis = list(range(2, 65, 2))
-        speedup = [(CANVAS * t_ar_step) / (t_fixed + s * t_canvas) for s in s_axis]
-        fig, ax = plt.subplots(figsize=(8, 4))
-        ax.plot(s_axis, speedup, "-")
-        ax.axhline(1.0, color="gray", ls=":")
-        ax.axvspan(12, 16, color="tab:green", alpha=0.15, label="vendor: typical 12-16 steps")
-        ax.axvline(48, color="tab:red", ls="--", lw=1, label="max steps cap (48)")
-        ax.set_xlabel("denoising steps per 256-token canvas")
-        ax.set_ylabel("speedup vs AR decode (same weights, measured)")
-        ax.set_title(f"EXP C: measured speed model, consumer GPU ({res['params_m']}M toy)")
-        ax.legend()
-        fig.tight_layout()
-        fig.savefig(os.path.join(FIG_DIR, "fig_c_speedup.png"), dpi=120)
-        plt.close(fig)
 
 
 if __name__ == "__main__":
@@ -310,4 +252,5 @@ if __name__ == "__main__":
     exp_c()
     with open(os.path.join(HERE, "results.json"), "w") as f:
         json.dump(RESULTS, f, indent=2, ensure_ascii=False)
+    plot.render(RESULTS)
     print("done. results.json + figures/ written.")

@@ -13,10 +13,9 @@ import json
 import os
 import time
 
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import torch
+
+import plot
 
 from transformers import (
     DiffusionGemmaConfig,
@@ -117,19 +116,6 @@ def sweep_size():
         torch.cuda.empty_cache()
     RESULTS["size_sweep"] = rows
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
-    xs = [r["params_m"] for r in rows]
-    ax1.plot(xs, [r["cost_ratio"] for r in rows], "o-")
-    ax1.set_xlabel("model size (M params)")
-    ax1.set_ylabel("canvas forward / 1-token decode cost")
-    ax1.set_title("cost ratio vs size: no clear trend at toy scale")
-    ax2.plot(xs, [r["speedup_at_16"] for r in rows], "o-", color="tab:green")
-    ax2.set_xlabel("model size (M params)")
-    ax2.set_ylabel("speedup vs AR at 16 steps")
-    ax2.set_title("speedup at 16 steps stays ~13-15x (17M-336M)")
-    fig.tight_layout()
-    fig.savefig(os.path.join(FIG_DIR, "fig_d_size.png"), dpi=120)
-    plt.close(fig)
 
 
 def sweep_batch():
@@ -144,15 +130,6 @@ def sweep_batch():
         print(f"  {rows[-1]}")
     RESULTS["batch_sweep"] = rows
 
-    fig, ax = plt.subplots(figsize=(7, 4))
-    ax.plot([r["batch"] for r in rows], [r["speedup_at_16"] for r in rows], "o-")
-    ax.set_xscale("log", base=2)
-    ax.set_xlabel("batch size")
-    ax.set_ylabel("speedup vs AR at 16 steps")
-    ax.set_title("EXP D: diffusion advantage vs batch size (toy scale)")
-    fig.tight_layout()
-    fig.savefig(os.path.join(FIG_DIR, "fig_d_batch.png"), dpi=120)
-    plt.close(fig)
 
 
 if __name__ == "__main__":
@@ -160,4 +137,5 @@ if __name__ == "__main__":
     sweep_batch()
     with open(os.path.join(HERE, "results.json"), "w") as f:
         json.dump(RESULTS, f, indent=2, ensure_ascii=False)
+    plot.render(RESULTS)
     print("done.")
